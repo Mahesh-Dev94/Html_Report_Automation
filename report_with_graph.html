@@ -1,0 +1,339 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Telemetry Data Dashboard</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        /* General Styling */
+        body {
+            font-family: 'Arial', sans-serif;
+            margin: 0;
+            padding: 0;
+            background-color: #f4f4f4;
+        }
+
+        /* Header Styling */
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 15px 40px;
+            background-color: #004b87;
+            color: white;
+            box-shadow: 0px 2px 5px rgba(0, 0, 0, 0.1);
+        }
+
+        .header h1 {
+            font-size: 22px;
+            margin: 0;
+        }
+
+        .logo {
+            height: 40px;
+        }
+
+        /* Layout */
+        .container {
+            display: flex;
+            flex-direction: row;
+            padding: 10px;
+        }
+
+        .table-container {
+            width: 65%;
+            background: white;
+            padding: 10px;
+            border-radius: 8px;
+            box-shadow: 0px 4px 10px rgba(0, 0, 0, 0.1);
+			overflow-x: scroll; /* ✅ Enables horizontal scrolling */
+            max-height: 500px; /* ✅ Set a max height*/
+            overflow-y: auto; /* ✅ Enables vertical scrolling */
+        }
+
+        .chart-container {
+            width: 35%;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            background: white;
+            padding: 15px;
+            border-radius: 8px;
+            box-shadow: 0px 4px 10px rgba(0, 0, 0, 0.1);
+            margin-left: 20px;
+            max-height: 500px; /* ✅ Set a max height*/
+
+        }
+
+        /* Table Styling */
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            min-width: 800px; /* ✅ Avoids breaking UI */
+        }
+
+        th, td {
+            padding: 18px 10px;
+            text-align: left; /* ✅ Aligns text left */
+            border-bottom: 1px solid #ddd;
+            white-space: nowrap; /* ✅ Prevents text wrapping */
+        }
+
+        th {
+            background-color: #0071c5;
+            color: white;
+        }
+
+        tr:hover {
+            background-color: #eef7ff;
+            cursor: pointer;
+        }
+
+        /* Footer */
+        .footer {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 15px 40px;
+            background-color: #004b87;
+            color: white;
+            position: fixed;
+            bottom: 0;
+            width: 100%;
+        }
+
+        .footer-logo {
+            height: 30px;
+        }
+
+        .page-number {
+            font-size: 14px;
+            font-weight: bold;
+        }
+
+        /* Selected Row Highlight */
+        .selected {
+            background-color: #d8eafd !important;
+        }
+    </style>
+</head>
+<body>
+
+<!-- Header -->
+<div class="header">
+    <h1>Telemetry Data Dashboard</h1>
+    <img src="hotwire_logo.png" alt="Hotwire Communications" class="logo">
+</div>
+
+<!-- Main Content -->
+<div class="container">
+    <!-- Table -->
+    <div class="table-container">
+        <table id="telemetryTable">
+            <thead>
+                <tr id="tableHead"></tr>
+            </thead>
+            <tbody id="tableBody"></tbody>
+        </table>
+    </div>
+
+    <!-- Chart -->
+    <div class="chart-container">
+        <canvas id="testChart"></canvas>
+    </div>
+</div>
+
+<script>
+    let chartInstance = null;
+    let selectedRow = null;
+
+    function formatFolderDatetime(folderName) {
+    if (folderName.length !== 14) return folderName; // Return as is if not valid
+
+    let year = folderName.substring(0, 4);
+    let month = folderName.substring(4, 6);
+    let day = folderName.substring(6, 8);
+    let hour = folderName.substring(8, 10);
+    let minute = folderName.substring(10, 12);
+
+    // Convert month number to short month name
+    const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+    let monthName = monthNames[parseInt(month, 10) - 1];
+
+    // Convert 24-hour format to 12-hour with AM/PM
+    let hourInt = parseInt(hour, 10);
+    let amPm = hourInt >= 12 ? "PM" : "AM";
+    hourInt = hourInt % 12 || 12; // Convert "00" or "12-23" to 12-hour format
+
+    return `${day} ${monthName}, ${hourInt}:${minute} ${amPm}`;
+}
+
+    fetch("http://127.0.0.1:5001/api/telemetry")
+        .then(response => response.json())
+        .then(({ folders, data }) => {
+            const testCases = {};
+            console.log('folders:', JSON.stringify(folders), 'data:', JSON.stringify(data));
+           
+
+        // 🔹 Replace folder names with "Test 1", "Test 2", ...
+            let folderLabels = folders.map((_, index) => `Test (${formatFolderDatetime(folders[index])})`);
+
+            Object.values(data).forEach(buildData => {
+                buildData.forEach(test => {
+                    if (!testCases[test.ID]) {
+                        testCases[test.ID] = { ID: test.ID, description: test.description };
+                    }
+                });
+            });
+
+            const tableHead = document.getElementById('tableHead');
+            const tableBody = document.getElementById('tableBody');
+
+            // Create table headers
+			// 🔹 Update table headers (ID, Description, Test 1, Test 2, ...)
+            let headers = ["ID", "Description", ...folderLabels];
+            headers.forEach(header => {
+                let th = document.createElement('th');
+                th.textContent = header;
+                tableHead.appendChild(th);
+            });
+
+            let firstRowData = null; // Store first row for default graph
+
+            // Populate table rows
+            Object.values(testCases).forEach((test, index) => {
+                let tr = document.createElement('tr');
+                tr.innerHTML = `<td>${test.ID}</td><td>${test.description}</td>`;
+
+                let durations = [];
+
+                folders.forEach(build => {
+                    let td = document.createElement('td');
+                    let buildData = data[build]?.find(t => t.ID === test.ID);
+                    
+                    if (buildData) {
+						let unit = (buildData.Duration && buildData.Duration.toLowerCase().includes("sec")) ?"sec":"mb";
+						td.innerHTML = buildData.Duration.startsWith("$") 
+                      ? `<span style="color: red;">✗ FAIL</span>` : `<span style="color: green;">✔ ${buildData.Duration}</span>`;
+						
+                      durations.push({ build, duration: parseFloat(buildData.Duration), unit });
+                    } else {
+                        td.innerHTML = `<span style="color: red;">✗ N/A</span>`;
+                        durations.push({ build, duration: 0, unit: "sec" });
+                    }
+
+                    tr.appendChild(td);
+                });
+
+               
+
+                tr.addEventListener("click", () => {
+                    if (selectedRow) selectedRow.classList.remove("selected");
+                    tr.classList.add("selected");
+                    selectedRow = tr;
+                    updateChart(test.ID, durations,test.description);
+                });
+
+                tableBody.appendChild(tr);
+
+                // Store first row data to render graph on page load
+                if (index === 0) {
+                    firstRowData = { testID: test.ID, durations, description:test.description };
+                    tr.classList.add("selected");
+                    selectedRow = tr;
+                }
+            });
+
+            // Render the first row's data in the chart by default
+            if (firstRowData) {
+				console.log('firstRowData---',firstRowData.description)
+                updateChart(firstRowData.testID, firstRowData.durations,firstRowData.description);
+            }
+        })
+        .catch(error => console.error("Error loading data:", error));
+
+   
+	function updateChart(testID, durations,description) {
+    const ctx = document.getElementById('testChart').getContext('2d');
+
+    // Specify columns to remove (example: removing 'Build1')
+    const columnsToRemove = ["Build1"]; // Modify as needed
+
+    // Filter out specified columns
+    const filteredDurations = durations.filter(d => !columnsToRemove.includes(d.build));
+     // ✅ Replace real folder names with "Test 1", "Test 2" in chart labels
+    // const labels = filteredDurations.map(d => d.build);
+	const labels = durations.map((d, i) => `Test ${i + 1}`);
+    const data = filteredDurations.map(d => d.duration);
+    const unit = filteredDurations[0]?.unit || "sec"; // Get unit dynamically
+
+    if (chartInstance) {
+        chartInstance.destroy();
+    }
+
+    chartInstance = new Chart(ctx, {
+        type: 'bar',
+        data: {
+            labels: labels,
+            datasets: [{
+                // label: `Execution ${unit === 'mb' ? 'Memory' : 'Duration'} for Test ID: ${testID} (${unit}${unit === 'mb' ? 'ps' : ''})`,
+                label: description,    //`Test ID: ${testID}`,
+                data: data,
+                backgroundColor:['#6CB8BF', '#97C7E8', '#C1E2E3', '#f59fa7'],      //['#0071c5', '#28a745', '#ffc107', '#dc3545'],
+                borderWidth: 1,
+                borderRadius: 10, /* ✅ Rounded bar edges */
+                barThickness: 45, /* ✅ Slightly bigger bars */
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false, /* ✅ Increases chart height */
+            animation: {
+                duration: 1000,
+                easing: 'easeOutBounce'
+            },
+            scales: {
+                y: {
+                    beginAtZero: true,
+                    title: {
+                        display: true,
+                        text: `${unit === 'mb' ? '' : 'Seconds'}`, // ✅ Updates dynamically
+
+                        // text: `Execution ${unit === 'mb' ? 'Memory' : 'Time'} (${unit}${unit === 'mb' ? 'ps' : ''})`, // ✅ Updates dynamically
+                        font: { size: 14 }
+                    }
+                },
+                x: {
+                    title: {
+                        display: true,
+                        text: 'Build Versions',
+                        font: { size: 14 }
+                    }
+                }
+            },
+            plugins: {
+                legend: { 
+                    display: true,
+                    position: 'top',
+                    labels: {
+						 font: { size: 14 }, 
+						 usePointStyle: true, /* ✅ Use a different style */
+						 pointStyle: 'rect', /* ✅ Removes color square */
+						}
+                }
+            }
+        }
+    });
+}
+
+</script>
+
+<!-- Footer -->
+<div class="footer">
+    <!-- <img src="r_systems_logo.png" alt="R Systems Logo" class="footer-logo">
+    <span class="page-number">7</span> -->
+</div>
+
+</body>
+</html>
