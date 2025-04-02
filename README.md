@@ -109,6 +109,14 @@ This project contains a Python script and a Flask API for generating and serving
 
 4.  **View Dynamic Report:**
     * Open a web browser and open the `report_with_graph.html` file.  Ensure the Flask API is running so the HTML can fetch the data.
+      
+
+
+## Visual Representation of the System
+
+Here's a diagram illustrating the interaction between the components:
+
+![System Architecture](system_architecture.png)
 
 ## Summary
 
