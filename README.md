@@ -117,6 +117,10 @@ This project contains a Python script and a Flask API for generating and serving
 Here's a diagram illustrating the interaction between the components:
 
 ![System Architecture](system_architecture.png)
+<div align="center">
+   <img src="system_architecture.png" />
+   
+</div> 
 
 ## Summary
 
